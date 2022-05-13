@@ -1,0 +1,1 @@
+.\build_vc\Release\TestLocalBivariateQuadricRANSAC.exe -i DataPointsCorrupted.xyz -o LBQ.txt -rt 0.05

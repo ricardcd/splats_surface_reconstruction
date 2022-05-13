@@ -1,0 +1,1 @@
+.\build_vc\Release\TestLocalBivariateQuadric.exe -i DataPoints.xyz -o Coeffs.txt -h 2

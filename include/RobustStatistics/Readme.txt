@@ -1,0 +1,1 @@
+Generic templated Ransac library.

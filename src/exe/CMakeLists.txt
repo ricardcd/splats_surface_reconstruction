@@ -1,0 +1,7 @@
+add_subdirectory(mesh_point_set)
+add_subdirectory(compute_splats)
+add_subdirectory(mesh_splats)
+add_subdirectory(orient_splats)
+add_subdirectory(mesh_oriented_splats)
+add_subdirectory(mesh_splats_gcut)
+add_subdirectory(mesh_splats_ncut)
