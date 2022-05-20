@@ -62,7 +62,7 @@ WORKDIR /opt/splats_surface_reconstruction/build
 ENV LEVMAR_INC_DIR=/opt/levmar-2.6
 ENV LEVMAR_LIB_DIR=/opt/levmar-2.6
 RUN cmake -DSPLATS_BUILD_TESTS=False ..
-RUN make -j$(nproc) install
+RUN make install
 ENV LD_LIBRARY_PATH=/lib:/usr/lib:/usr/local/lib
 WORKDIR /opt/splats_surface_reconstruction
 

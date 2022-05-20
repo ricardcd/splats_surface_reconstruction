@@ -75,13 +75,13 @@ docker pull ricardcd/splats_surface_reconstruction:1.0
 * Running a bash inside a container (note the `-v` option to mount a local drive to `./demo/results`, so you can access the results easily):
 
 ```
-docker run -it -v <your_local_directory:/opt/splats_surface_reconstruction/demo/results ricardcd/splats_surface_reconstruction:1.0 /bin/bash
+docker run -it -v <your_local_dir:/opt/splats_surface_reconstruction/demo/results ricardcd/splats_surface_reconstruction:1.0 /bin/bash
 ```
 
 * And executing the demos script from within the container:
 
 ```
-cd demos
+cd demo
 ./run_demos_sphere.sh
 ```
 
