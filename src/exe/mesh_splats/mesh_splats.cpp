@@ -36,10 +36,8 @@
 	// IO
 #include <CGAL/IO/Polyhedron_iostream.h>
 #include "C2t3/Complex_3_in_triangulation_3_file_writer.h"
-
-// CImg include (only used here for easily dealing with input parameters)
-#include "CImg.h"
-
+    // Boost
+#include <boost/program_options.hpp>
 // Project-specific includes
 #include "Splat_3_Mesher/AABB_Tree_Splat_3_Mesher_Oracle.h"
 #include "Splat_3_Surface_Mesher/AABB_Tree_Splat_3_Surface_Mesher_Oracle.h"
@@ -77,31 +75,51 @@ typedef CGAL::Mesh_criteria_3< MTr >						Mesh_criteria ;
 typedef CGAL::Surface_mesh_default_triangulation_3			Tr ;
 typedef CGAL::Complex_2_in_triangulation_3<Tr>				C2t3 ;
 
-
-
+// Other definitions
 using namespace std ;
+namespace po = boost::program_options;
 
 /* Main function */
 int main ( int argc, char **argv) {
 
-	cimg_usage("Error, wrong number of parameters!\nUsage: ./Splat_3_Mesher -ips <input_pointset_file_path> -od <output_off_dir_path> -ofn <(opt)output_off_file_name(will be automatically generated if not specifyed)> -ab <(opt)angular_bound_in_degrees> -rb <(opt)radius_bound> -db <(opt)distance_bound> -mf <(opt)ManifoldnessFlag> -it <(opt)intersectionType> -ds <(opt)distanceSigma> -ms <(opt)mogSigma> -nb <(opt)numBins>\n       Where: ManifoldnessFlag = 1 --> Manifold_tag\n              ManifoldnessFlag = 2 --> Manifold_with_boundary_tag\n              ManifoldnessFlag = 3 --> Non_manifold_tag\nNote: refer to the CGAL documentation, on the 3D Surface Mesh Generation section, for more information about the meaning of these parameters." ) ;
+    /* Parse input parameters */
+    std::string inputSplatsFile, outputFileName, outputFileDir;
+    double angularBound, radiusBound, distanceBound, ransacDistThres, smallestRansacSegment, distanceSigma;
+    int manifoldFlag, mesherType;
+    bool doCleanResults = false;
 
-	// Parse/default input parameters
-	const char*		inputSplatsFile			= cimg_option( "-i",		(char*)0,		"Input Splats file" ) ;
-	const char*		outputFileDir			= cimg_option( "-od",		(char*)0,		"Output mesh directory" ) ;
-	const char*		outputFileName			= cimg_option( "-ofn",		(char*)0,		"Output file name" ) ;
-	const double	angularBound			= cimg_option( "-ab",		10.0,			"Angular Bound" ) ;
-	const double	radiusBound				= cimg_option( "-rb",		0.1,			"Radius Bound" ) ;
-	const double	distanceBound			= cimg_option( "-db",		0.1,			"Distance Bound" ) ;
-	const int		manifoldFlag			= cimg_option( "-mf",		2,				"Manifoldness Flag" ) ;
-	const double	ransacDistThres			= cimg_option( "-rdt",		0.1,			"Ransac distance threshold" ) ;
-	const double	smallestRansacSegment	= cimg_option( "-srs",		distanceBound,	"Smallest segment to apply ransac (if segment.length is smaller, no ransac will be applied)" ) ;
-	const bool		doOutputRedirection		= cimg_option( "-outTxt",	false,			"Output on-screen redirection to txt file." ) ;
-	const double	distanceSigma			= cimg_option( "-ds",		0.25,			"Distance Sigma (only used when -it 1|2)" ) ;
-	const int		mesherType				= cimg_option( "-mesher",	0,				"CGAL Mesher type: 0 = Surface Mesher / 1 = Mesher" ) ;
-	const bool		doCleanResults			= cimg_option( "-clean",	true,			"Try some cleaning steps on the output surface" ) ;
-	
+    po::options_description options("Meshes a set of splats");
+    options.add_options()
+            ("help,h", "Produce help message")
+            ("inFile,i", po::value<std::string>(&inputSplatsFile), "Input point set file path.")
+            ("outFile,o", po::value<std::string>(&outputFileName), "Output mesh file path (OFF format).")
+            ("outDir", po::value<std::string>(&outputFileDir), "Output directory. If outFile is not specified, a file with a default name containig a list of the parameters used will be written in this directory.")
+            ("ransacThreshold,t", po::value<double>(&ransacDistThres)->default_value(0.7), "Distance threshold of the RANSAC intersection test")
+            ("distanceSigma", po::value<double>(&distanceSigma)->default_value(0.25), "Distance sigma of the RANSAC intersection test")
+            ("smallestRansacSegment", po::value<double>(&smallestRansacSegment)->default_value(distanceBound), "If the query segment length is smaller than this value, the RANSAC test will not be applied (setting this parameter to a large value effectively deactivates the RANSAC intersection test)" )
+            ("mesher", po::value<int>(&mesherType)->default_value(0), "CGAL Mesher type: 0 = Surface Mesher / 1 = Mesher" )
+            ("ab", po::value<double>(&angularBound)->default_value(10), "[(Surface) Mesher] Angular bound")
+            ("rb", po::value<double>(&radiusBound)->default_value(0.1), "[(Surface) Mesher] Radius bound")
+            ("db", po::value<double>(&distanceBound)->default_value(0.1), "[(Surface) Mesher] Distance bound")
+            ("mf", po::value<int>(&manifoldFlag)->default_value(2), "[(Surface) Mesher] Surface Mesher's manifoldness flag (0 == Manifold, 1 == Manifold with boundary, 2 = Non-manifold)")
+            ("clean", po::bool_switch(&doCleanResults), "[(Surface) Mesher] If set, will try some cleaning steps on the output surface")
+       ;
+
+    // Read parameters from command line
+    po::variables_map vm;
+    po::store(po::parse_command_line(argc, argv, options), vm);
+    po::notify(vm);
+
+    if (vm.count("help") || argc == 1) {
+        std::cout << options << "\n";
+        return 1;
+    }
+
 	// Some input parameters check
+    if (outputFileName.empty() && outputFileDir.empty()) {
+        std::cout << "[ERROR] Please set either --outFile or --outDir parameters (or both)." << std::endl;
+        return -1;
+    }
 	if ( manifoldFlag < 0 || manifoldFlag > 2 ) {
 		cerr << "ManifoldnessFlag parameter must be 0, 1 or 2!" << endl ;
 		return -1 ;
@@ -110,6 +128,10 @@ int main ( int argc, char **argv) {
 		cerr << "Ransac distance threshold parameter must be > 0!" << endl ;
 		return -1 ;
 	}
+	if (mesherType < 0 || mesherType > 1) {
+        cerr << "Mesher type must be either 0 (Surface mesher) or 1 (Mesher)!" << endl ;
+        return -1;
+	}
 	
 	// Get the file type ( *.ops = oriented pointset / *.opss = oriented pointset with score )
 	string inputFilePathStr( inputSplatsFile ) ;
@@ -117,7 +139,7 @@ int main ( int argc, char **argv) {
 	string inputFileExtension = inputFilePathStr.substr( indexFileExtension+1, ( inputFilePathStr.size()-(indexFileExtension+1) ) ) ;
 	//cout << inputFileExtension << endl ;
 	if ( strcmp( inputFileExtension.c_str(), "splat" ) != 0 ) {
-		cerr << "Unrecognized file type..." << endl ;
+		cerr << "Unrecognized input file type! (should be a .splat file)" << endl ;
 		return -1 ;
 	}
 
@@ -127,7 +149,7 @@ int main ( int argc, char **argv) {
 	std::ostringstream otxt ; 
 	std::ostringstream orName ; // Debug only!
 	std::ostringstream cleanName ; 
-	if ( outputFileName == (char*)0 ) {
+	if ( outputFileName.empty() ) {
 		// Get the input file name, to name the output one with the same name
 		string inputFilePathStr( inputSplatsFile ) ; 
 		size_t indexFileName = inputFilePathStr.find_last_of( "/\\" ) ;
@@ -146,15 +168,11 @@ int main ( int argc, char **argv) {
 			cleanName << oss.str() << "_clean.off" ;
 		}
 
-		if ( doOutputRedirection ) {
-			otxt << oss.str() << ".txt" ;
-		}
-
 		oss << ".off" ;
 		
 	}
 	else {
-		if ( outputFileDir == (char*)0 ) {
+		if ( outputFileDir.empty() ) {
 			oss << outputFileName ;
 		}
 		else {
@@ -167,21 +185,11 @@ int main ( int argc, char **argv) {
 		string outputFileNameStr = outputFileNamePath.substr( indexFileName+1, ( indexFileExtension - indexFileName - 1 ) ) ;
 
 		cleanName << outputFileNamePath.substr( 0, indexFileName ) << "/" << outputFileNameStr << "_clean.off" ;
-
 	}
 	char* fullOutputFilePath ;
 	fullOutputFilePath = new char [ oss.str().size()+1 ] ;
 	strcpy ( fullOutputFilePath, oss.str().c_str() ) ;
 	
-	// Redirect the output if needed
-	std::ofstream outTxt;
-	if ( doOutputRedirection ) {
-		cout << "Redirecting output to a txt file..." << endl ;
-		outTxt.open( otxt.str().c_str() ) ;
-		std::streambuf *coutbuf = std::cout.rdbuf() ; //save old buf
-		std::cout.rdbuf( outTxt.rdbuf() ) ;
-	}
-
 	// Print parameters on screen
 	cout << "Parameters:" << endl ;
 	cout << "  Input file: " << inputSplatsFile << endl ;
@@ -235,13 +243,12 @@ int main ( int argc, char **argv) {
 		// Add the initial points to the triangulation
 		std::vector< Point_3 > initialPoints ;
 		{	
-			// Insert a set of 10 random points from the original polygon into the triangulation		
+			// Insert a set of 10 random points (splats' centers) into the triangulation
 			typedef std::vector< Point_3 >::size_type size_type ;
 			size_type nb_initial_points = 10 ;
 			nb_initial_points = (std::min)( nb_initial_points, splats.size() ) ;
 			for( size_type n = 0; n < nb_initial_points; n++ ) {				 
 				const int pos = CGAL::default_random.get_int( 0, static_cast< int >( splats.size() ) ) ;
-				//const int pos = CGAL::default_random.get_int( 0, 1000 ) ; // WARNING!!! Debug only!!!
 				initialPoints.push_back( splats[ pos ].center() ) ;
 			}
 		}
@@ -254,6 +261,7 @@ int main ( int argc, char **argv) {
 		// Construct the oracle
 		Surface_Mesher_Oracle oracle( tree,
 									  initialPoints,
+									  distanceSigma,
 									  ransacDistThres, 
 									  smallestRansacSegment ) ;
 	
@@ -369,7 +377,7 @@ int main ( int argc, char **argv) {
 		cout << "Creating the oracle..." << flush ;		
 		Mesher_Oracle oracle( tree, 	
 							  initialPoints,
-							  distanceSigma, 
+							  distanceSigma,
 							  ransacDistThres, 
 							  smallestRansacSegment ) ; 
 		cout << "done" << endl ;
@@ -392,10 +400,6 @@ int main ( int argc, char **argv) {
 		timer.stop() ;
 		cout << "done (" << timer.time() << " s)" << endl ;
 		timer.reset() ;
-	
-		if ( doOutputRedirection ) {
-			outTxt.close() ;
-		}
 	}
 
 	return 0 ;

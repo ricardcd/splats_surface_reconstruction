@@ -65,7 +65,7 @@ public:
 
 	/* Enums */
 	enum NeighborsType{ KNN = 0, RadialNN } ; // Available types of neighborhood
-	enum DistanceType{ MeanNN = 0 } ; // Available types of neighborhood
+	// enum DistanceType{ MeanNN = 0 } ; // Available types of neighborhood
     enum InputType{ Pointset = 0, OrientedPointset, OrientedPointsetWithScores } ; // Available types of input
 
 	/* Constructors */
@@ -101,14 +101,14 @@ public:
 	double getNeighRadius() { return m_neighRadius ; }
 	void setNeighRadius( double neighRadius ) { m_neighRadius = neighRadius ; }
 	
-	int	getDistType() { return m_distType ; }
-	void setDistType( int distType ) {
-		if ( distType != MeanNN ) {
-			std::cerr << "[SplatsCreator] Unknown distance type! Not modifying..." << std::endl ;
-			return ;
-		}
-		m_distType = distType ;
-	}
+	// int	getDistType() { return m_distType ; }
+	// void setDistType( int distType ) {
+	// 	if ( distType != MeanNN ) {
+	// 		std::cerr << "[SplatsCreator] Unknown distance type! Not modifying..." << std::endl ;
+	// 		return ;
+	// 	}
+	// 	m_distType = distType ;
+	// }
 	
 	unsigned int getK() { return m_k ; } 
 	void setK( unsigned int k ) { 
@@ -260,7 +260,7 @@ private:
 	int m_inputType ;
 	int	m_neighType ;
 	double m_neighRadius ;
-	int	m_distType ;
+	// int	m_distType ;
 	double m_distThres ; // RANSAC distance threshold
 	unsigned int m_k ;
 	unsigned int m_lssDegree ;	
@@ -364,7 +364,7 @@ template< class K >
 void SplatsCreator<K>::setDefaultParameters() {
     m_neighType = KNN ;
 	m_neighRadius = std::numeric_limits<double>::infinity() ;
-    m_distType = MeanNN ;
+    // m_distType = MeanNN ;
 	m_distThres = 0.1 ;
 	m_k = 50 ;
 	m_lssDegree = 2 ;
@@ -1122,7 +1122,7 @@ std::string SplatsCreator<K>::getParametersString() {
 	else
 		oss << "nr" << m_neighRadius << "_" ;
 	
-	oss << "dt" << m_distType << "_" ;	
+	// oss << "dt" << m_distType << "_" ;	
 	oss << "sd" << m_lssDegree << "_" ;
 	oss << "sp" << m_minFitPts << "_" ;	
 	

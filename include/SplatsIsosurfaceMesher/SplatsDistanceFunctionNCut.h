@@ -252,7 +252,8 @@ public:
 							const bool contourAtMedian = false,
 							const int bandKnn = -1, 
                             const double epsilon = 0.001,
-                            const int odepth = -1 )
+                            const int odepth = -1,
+                            const bool debugOutput = false)
 							: m_tr(new Triangulation) // , GenericFunction<K>()
 	{
 		m_inputType = SPLATS ;
@@ -267,12 +268,15 @@ public:
 		m_timeImplicit = 0.0 ;
 		m_timeSigning = 0.0 ;
 		m_epsilon = epsilon ;
+		m_debugOutput = debugOutput;
 
 		// --- Debug (Start) ---
-		// Initialize output directory
-		boost::filesystem::path dir( "./_OUT" ) ;
-		if (boost::filesystem::create_directory( dir ) )
-			std::cout << "[DEBUG] Created Debug Output Directory (./_OUT)" << "\n";
+		if (m_debugOutput) {
+            // Initialize output directory
+            boost::filesystem::path dir( "./_OUT" ) ;
+            if (boost::filesystem::create_directory( dir ) )
+                std::cout << "[DEBUG] Created Debug Output Directory (./_OUT)" << "\n";
+		}
 		// --- Debug  (End)  ---
 
 		// Extract centers
@@ -303,6 +307,8 @@ public:
             m_tr->insert( points.begin(), points.end() ) ;
             std::cout << "done" << std::endl ;
         }
+
+        this->addBoundingBoxSteinerPoints(points);
 		
 		// Construct the KD-Tree with these center points
 		m_pTree = pNNTree( new NNTree( boost::make_zip_iterator(boost::make_tuple( points.begin(), splats.begin() ) ),
@@ -392,7 +398,8 @@ public:
 								const bool contourAtMedian = false,
 								const int bandKnn = -1,
                                 const double epsilon = 0.001,
-                                const int odepth = -1 )
+                                const int odepth = -1,
+                                const bool debugOutput = false)
 							: m_tr(new Triangulation) // , GenericFunction<K>()
 	{
 		m_inputType = POINTS ;
@@ -412,12 +419,15 @@ public:
 		m_timeImplicit = 0.0 ;
 		m_timeSigning = 0.0 ;
 		m_epsilon = epsilon ;
+		m_debugOutput = debugOutput;
 		
 		// --- Debug (Start) ---
-		// Initialize output directory
-		boost::filesystem::path dir( "./_OUT" ) ;
-		if (boost::filesystem::create_directory( dir ) )
-			std::cout << "[DEBUG] Created Debug Output Directory (./_OUT)" << "\n";
+		if (m_debugOutput) {
+            // Initialize output directory
+            boost::filesystem::path dir("./_OUT");
+            if (boost::filesystem::create_directory(dir))
+                std::cout << "[DEBUG] Created Debug Output Directory (./_OUT)" << "\n";
+        }
 		// --- Debug  (End)  ---
 
 		// Build initial triangulation
@@ -441,6 +451,8 @@ public:
             m_tr->insert( points.begin(), points.end() ) ;
             std::cout << "done" << std::endl ;
         }
+
+        this->addBoundingBoxSteinerPoints(points);
 		
 		// Construct the KD-Tree with these center points
 		m_ptsTree = pPtsNNTree( new PtsNNTree( points.begin(), points.end() ) ) ;
@@ -517,8 +529,44 @@ public:
 		}
 
 	}
-	
 
+    void addBoundingBoxSteinerPoints(const std::vector< Point_3 >& points) {
+        // Determine min/max of the given set of points
+        FT min_x = points[0].x() ;
+        FT min_y = points[0].y() ;
+        FT min_z = points[0].z() ;
+
+        FT max_x = points[0].x() ;
+        FT max_y = points[0].y() ;
+        FT max_z = points[0].z() ;
+
+
+        typename std::vector<Point_3>::const_iterator it ;
+        for ( it = points.begin();
+              it != points.end();
+              ++it )
+        {
+            if ( it->x() < min_x ) min_x = it->x() ;
+            if ( it->y() < min_y ) min_y = it->y() ;
+            if ( it->z() < min_z ) min_z = it->z() ;
+            if ( it->x() > max_x ) max_x = it->x() ;
+            if ( it->y() > max_y ) max_y = it->y() ;
+            if ( it->z() > max_z ) max_z = it->z() ;
+        }
+
+        // Steiner points
+        std::vector<Point_3> steinerBB;
+        steinerBB.push_back(Point_3(min_x, min_y, min_z));
+        steinerBB.push_back(Point_3(min_x, max_y, min_z));
+        steinerBB.push_back(Point_3(min_x, max_y, max_z));
+        steinerBB.push_back(Point_3(min_x, min_y, max_z));
+        steinerBB.push_back(Point_3(max_x, min_y, min_z));
+        steinerBB.push_back(Point_3(max_x, max_y, min_z));
+        steinerBB.push_back(Point_3(max_x, max_y, max_z));
+        steinerBB.push_back(Point_3(max_x, min_y, max_z));
+
+        m_tr->insert( steinerBB.begin(), steinerBB.end() ) ;
+    }
 
 	FT getTimeImplicitFunctionCreation() const {
 		return m_timeImplicit ;
@@ -853,10 +901,13 @@ public:
 		std::cout << "[DEBUG] EigenValues = < " << eigenValues(0) << ", " << eigenValues(1) << " >" << std::endl ;
 		
 		// --- Debug (Start) ---
-		std::ofstream ofio( "./_OUT/InsideVertices_OPT.xyz", std::ios_base::out ) ;
-		std::ofstream ofoo( "./_OUT/OutsideVertices_OPT.xyz", std::ios_base::out ) ;
-		std::ofstream ofe( "./_OUT/2ndSmallestEigenVector.txt", std::ios_base::out ) ;
-		std::ofstream oft( "./_OUT/TriVert.xyz", std::ios_base::out ) ;
+        std::ofstream ofio, ofoo, ofe, oft;
+		if (m_debugOutput) {
+            ofio.open("./_OUT/InsideVertices_OPT.xyz", std::ios_base::out);
+            ofoo.open("./_OUT/OutsideVertices_OPT.xyz", std::ios_base::out);
+            ofe.open("./_OUT/2ndSmallestEigenVector.txt", std::ios_base::out);
+            oft.open("./_OUT/TriVert.xyz", std::ios_base::out);
+        }
 		// --- Debug  (End)  ---
 
 		// Sign function according to second smallest eigenvector
@@ -1003,9 +1054,12 @@ public:
 		std::cout << "[DEBUG] EigenValues = < " << eigenValues(0) << ", " << eigenValues(1) << " >" << std::endl ;
 		
 		// --- Debug (Start) ---
-		std::ofstream ofio( "./_OUT/InsideVertices_OPT.xyz", std::ios_base::out ) ;
-		std::ofstream ofoo( "./_OUT/OutsideVertices_OPT.xyz", std::ios_base::out ) ;
-		std::ofstream oft( "./_OUT/TriVert.xyz", std::ios_base::out ) ;
+        std::ofstream ofio, ofoo, oft;
+        if (m_debugOutput) {
+            ofio.open("./_OUT/InsideVertices_OPT.xyz", std::ios_base::out);
+            ofoo.open("./_OUT/OutsideVertices_OPT.xyz", std::ios_base::out);
+            oft.open("./_OUT/TriVert.xyz", std::ios_base::out);
+        }
 		// --- Debug  (End)  ---
 
 		// Sign function according to second smallest eigenvector
@@ -1457,7 +1511,7 @@ private:
 	FT m_timeImplicit ;
 	FT m_timeSigning ;
 	FT m_epsilon ;
-
+    bool m_debugOutput;
 
 	/* Functions */
 
@@ -1803,15 +1857,18 @@ private:
 		std::cout << " >" << std::endl ;
 		
 		// --- Debug (Start) ---
-		std::ofstream ofio( "./_OUT/InsideVertices_OPT.xyz", std::ios_base::out ) ;
-		std::ofstream ofoo( "./_OUT/OutsideVertices_OPT.xyz", std::ios_base::out ) ;
-		std::ofstream ofe( "./_OUT/2ndSmallestEigenVector.txt", std::ios_base::out ) ;
-		std::ofstream oft( "./_OUT/TriVert.xyz", std::ios_base::out ) ;
-		std::ofstream ofb( "./_OUT/VertInBand.xyz", std::ios_base::out ) ;
-		// std::ofstream off( "./_OUT/DistanceFunction.xyz", std::ios_base::out ) ;
-		/*std::ofstream oftt( "./_OUT/Triangulation.tri", std::ios_base::out ) ;
-		oftt << *m_tr ;
-		oftt.close() ;*/
+        std::ofstream ofio, ofoo, ofe, oft, ofb;
+		if (m_debugOutput) {
+            ofio.open("./_OUT/InsideVertices_OPT.xyz", std::ios_base::out);
+            ofoo.open("./_OUT/OutsideVertices_OPT.xyz", std::ios_base::out);
+            ofe.open("./_OUT/2ndSmallestEigenVector.txt", std::ios_base::out);
+            oft.open("./_OUT/TriVert.xyz", std::ios_base::out);
+            ofb.open("./_OUT/VertInBand.xyz", std::ios_base::out);
+            // std::ofstream off( "./_OUT/DistanceFunction.xyz", std::ios_base::out ) ;
+            /*std::ofstream oftt( "./_OUT/Triangulation.tri", std::ios_base::out ) ;
+            oftt << *m_tr ;
+            oftt.close() ;*/
+        }
 		// --- Debug  (End)  ---
 
 		// Sign function according to second smallest eigenvector

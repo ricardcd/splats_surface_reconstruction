@@ -19,9 +19,8 @@
 #include <CGAL/Timer.h>	
 	// Point set processing
 #include <CGAL/mst_orient_normals.h>
-
-// CImg include (only used here for easily dealing with input parameters)
-#include "CImg.h"
+    // Boost
+#include <boost/program_options.hpp>
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K ;
 
@@ -39,17 +38,45 @@ typedef std::pair< Point_3, Vector_3 > OrientedPoint ;
 
 // Other definitions
 using namespace std ;
-
+namespace po = boost::program_options;
 
 
 /* Main function */
 int main ( int argc, char **argv) {
 
+
+
 	// Parse/default input parameters
-	const char*		inputSplatsFile			= cimg_option( "-i",		(char*)0,		"Input splats file" ) ;	
-	const char*		outputSplatsFile		= cimg_option( "-o",		(char*)0,		"Output oriented splats file" ) ;
-	const int		k						= cimg_option( "-k",		15,				"K-nearest neighbors to take into account during MST orientation." ) ;
-	
+	std::string inputSplatsFile, outputSplatsFile;
+	int k;
+
+    po::options_description options("Computes a globally-consistent orientation in a splats set.");
+    options.add_options()
+            ("help,h", "Produce help message")
+            ("inFile,i", po::value<std::string>(&inputSplatsFile), "Input splats file path.")
+            ("outFile,o", po::value<std::string>(&outputSplatsFile), "Output oriented splats file.")
+            ("knn,k", po::value<int>(&k)->default_value(15), "K-nearest neighbors to take into account during MST orientation.")
+        ;
+
+    // Read parameters from command line
+    po::variables_map vm;
+    po::store(po::parse_command_line(argc, argv, options), vm);
+    po::notify(vm);
+
+    if (vm.count("help") || argc == 1) {
+        std::cout << options << "\n";
+        return 1;
+    }
+
+    if (inputSplatsFile.empty()) {
+        std::cout << "[ERROR] Missing --inFile/-i required parameter!" << "\n";
+        return -1;
+    }
+    if (outputSplatsFile.empty()) {
+        std::cout << "[ERROR] Missing --outFile/-o required parameter!" << "\n";
+        return -1;
+    }
+
 	// Get the file type (*.splat)
 	string inputFilePathStr( inputSplatsFile ) ;
 	size_t indexFileExtension = inputFilePathStr.find_last_of( "." ) ;
@@ -64,7 +91,7 @@ int main ( int argc, char **argv) {
 	// Loading features
 	
 	// Read the input pointset file	
-	cout << "Reading splats from file..." << flush ;	
+	cout << "- Reading splats from file..." << flush ;
 	timer.start() ;
 	// Opening file
 	ifstream file( inputSplatsFile, ifstream::in ) ;
@@ -84,6 +111,9 @@ int main ( int argc, char **argv) {
 	timer.reset() ;
 	
 	/* Orient the splats */
+
+    cout << "- Orienting splats..." << flush ;
+    timer.start() ;
 
 	// Create a point-normal set
 	std::vector< Splat_3 >::iterator it ;
@@ -116,6 +146,10 @@ int main ( int argc, char **argv) {
 			// std::cout << it->monge().normal_direction() << std::endl ;
 		}
 	}
+
+    timer.stop() ;
+    cout << "done (" << timer.time() << " s)" << endl ;
+    timer.reset() ;
 
 	// Save results
 	cout << "- Writing results to file..." << flush ;

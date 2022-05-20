@@ -12,12 +12,15 @@
 #include <CGAL/IO/Complex_2_in_triangulation_3_file_writer.h> 
 #include <CGAL/IO/read_xyz_points.h>
 // CImg include (only used here for easily dealing with input parameters)
-#include "CImg.h"
+//#define cimg_display 0
+//#include "CImg.h"
 // Std includes
 #include <iostream>
 #include <fstream>
 #include <limits>
 #include <algorithm>
+// Boost
+#include <boost/program_options.hpp>
 // Project related
 #include "PointSetReader/PointSetReader.h" // Reader for pointsets (oriented or not)
 #include "PointSetSurfaceMesher/PointSetSurfaceMesherOracle.h"
@@ -25,6 +28,7 @@
 #include "PointSetSurfaceMesher/SegmentQueryIntersectionOracle.h"
 
 using namespace std ;
+namespace po = boost::program_options;
 
 // Main Kernel
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K ;
@@ -50,45 +54,73 @@ typedef CGAL::PointSetSurfaceMesherOracle<K>			PointsetSurfaceMesherOracle ;
 int main ( int argc, char **argv) {
 
 	/* Parse input parameters */
-	cimg_usage( "Direct meshing of pointsets." ) ;
-	// Basic
-	const char*			inputFile = cimg_option(			"-i",					(char*)0,	"Input Point Set file." ) ;
-	const char*			outputFile = cimg_option(			"-o",					(char*)0,	"Output file." ) ;
-	const char*			outputDir = cimg_option(			"-od",					(char*)0,	"Output directory." ) ;
-	const int			degree = cimg_option(				"-deg",					2,			"Local surface degree. Available: 1 (plane) and 2 (Local Bivariate Quadric)." ) ;
-	const bool			forceLBQOnSegment = cimg_option(	"-forceSegment",		true,		"Force the Local Bivariate Quadric to follow the query segment." ) ;
-	// Scale
-	const unsigned int	ransacThresholdType=cimg_option(	"-computeScale",		0,			"Flag indicating how the scale of the noise has to be computed: 0 = Not computed (fixed RANSAC threshold) / 1 = local computation (at each iteration) / 2 = precompute scales before meshing / 3 = Use fixed k-neighborhood / 4 = Load precomputed scales from file" ) ;
-	const double		quantile = cimg_option(				"-quantile",			0.1,		"Minimum inlier points expected inside the neighborhood (percentage, starting point to compute scale through MSSE)." ) ;
-	const double		probNoOutliers = cimg_option(		"-probNoOutliers",		0.99,		"Probability of getting a sample free from outliers in the LKS procedure." ) ;
-	const double		expectFracOutliers=cimg_option(		"-expectFracOutliers",	0.7,		"Expected fraction of outliers for the LKS procedure." ) ;	
-	const int			scalesEstimator = cimg_option(		"-scalesEst",			1,			"Scales model estimator (0 = Plane, 1 = LBQ)." ) ;
-	const int			scaleK = cimg_option(				"-scaleK",				200,		"Number of neighbors to take into account during scale computation using k-nearest neighbors (used if -computeScale = 3)" ) ;
-	// Ransac
-	const double		ransacThres = cimg_option(			"-rt",					0.7,		"RANSAC threshold." ) ;
-	const double		ransacT	=cimg_option(				"-ransacT",				2.5 ,		"Factor to multiply the scale in order to determine the RANSAC threshold" ) ;
-	const int			minInliers = cimg_option(			"-minInliers",			15,			"Minimum number of inliers for the ransac plane fitting in order to take into account this splat." ) ;
-	// Capsule search
-	const double		capRadPer = cimg_option(			"-capRad",				0.1,		"Radius for query capsule's segment, proportional to the minimum bounding sphere radius." ) ;
-	const double		weightHFactor = cimg_option(		"-weightHFactor",		1.0,		"H constant of the Gaussian weighting used during LocalBivariateQuadric fitting, proportional to the search capsule radius." ) ;
-	const double		scaleRadFactor=cimg_option(			"-scaleRadFactor",		3.0 ,		"This factor will multiply the query capsule radius (scale computation may need larger neighborhoods)." ) ;
-	// Density	
-	const bool			computeDensity = cimg_option(		"-computeDensity",		false,		"Density-aware query radius adaptation." ) ;
-	// Intersection validation
-	const double		intConsFact	= cimg_option(			"-consensusFact",		0.5 ,		"Factor defining the proportion of the current radius where to search for points in consensus with the intersection, that is, falling inside a sphere search of (current radius)*consesusFact" ) ;
-	const int			intConsNum	= cimg_option(			"-consensusNum",		3 ,			"Number of points falling at a distance smaller than (current radius)*consesusFact in order to consider the intersection as valid." ) ;
-	// Meshing
-	const double		angularBound = cimg_option(			"-ab",					10.0,		"Angular Bound." ) ;
-	const double		radiusBound = cimg_option(			"-rb",					0.1,		"Radius Bound." ) ;
-	const double		distanceBound = cimg_option(		"-db",					0.1,		"Distance Bound." ) ;
-	const int			manifoldFlag = cimg_option(			"-mf",					2,			"Manifoldness Flag." ) ;
-	const bool		    doCleanResults = cimg_option(		"-clean",				false,		"Try some cleaning steps on the output surface." ) ;	
-	// Debug
-	const bool			doOutputRedirect = cimg_option(		"-outTxt",				false,		"Output on-screen redirection to txt file." ) ;	
-	const bool			doOutputTimes = cimg_option(		"-outTimes",			true,		"Output execution times to txt file." ) ;	
-	const bool		    mesherDebugOutput = cimg_option(	"-debugOut",			false,		"Debug output." ) ;	
-	const bool		    mesherDebugVisualize = cimg_option(	"-debugVis",			false,		"Debug visualization." ) ;	
-	
+	std::string inputFile, outputFile, outputDir;
+	double quantile, probNoOutliers, expectFracOutliers, ransacThres, ransacT, capRadPer, weightHFactor, scaleRadFactor, intConsFact, angularBound, radiusBound, distanceBound;
+	int degree, scalesEstimator, scaleK, minInliers, intConsNum, manifoldFlag;
+	unsigned int ransacThresholdType;
+	bool forceLBQOnSegment, computeDensity, doCleanResults, doOutputTimes, mesherDebugOutput;
+
+    po::options_description options("Direct meshing of pointsets." ) ;
+    options.add_options()
+            ("help,h", "Produce help message")
+	        // Basic
+            ("inFile,i", po::value<std::string>(&inputFile), "Input point set file path.")
+            ("outFile,o", po::value<std::string>(&outputFile)->default_value(""), "Output mesh file path (OFF format).")
+            ("outDir", po::value<std::string>(&outputDir)->default_value("."), "Output directory. If outFile is not specified, a file with a default name containig a list of the parameters used will be written in this directory.")
+            ("deg", po::value<int>(&degree)->default_value(2), "Local surface degree. Available: 1 (plane) and 2 (Local Bivariate Quadric).")
+            ("forceSegment", po::value<bool>(&forceLBQOnSegment)->default_value(true), "Force the Local Bivariate Quadric to follow the query segment.")
+	        // Scale
+            ("computeScale", po::value<unsigned int>(&ransacThresholdType)->default_value(0), "Flag indicating how the scale of the noise has to be computed using the Modified Selective Statistical Estimator (MSSE). Available options: 0 = Not computed (use a fixed RANSAC threshold) / 1 = local computation (at each iteration) / 2 = precompute scales before meshing using a radial neighborhood / 3 = precompute scales before meshing using a fixed k-neighborhood / 4 = Load precomputed scales from file" )
+            ("quantile", po::value<double>(&quantile)->default_value(0.1), "[MSSE] Minimum inlier points expected inside the neighborhood (percentage, starting point to compute scale through MSSE).")
+            ("probNoOutliers", po::value<double>(&probNoOutliers)->default_value(0.99), "[MSSE] Probability of getting a sample free from outliers in the Least Kth Squares (LKS) procedure.")
+            ("expectFracOutliers", po::value<double>(&expectFracOutliers)->default_value(0.7), "[MSSE] Expected fraction of outliers for the LKS procedure.")
+            ("scalesEst", po::value<int>(&scalesEstimator)->default_value(1), "[MSSE] Scales model estimator (0 = Plane, 1 = LBQ).")
+            ("scaleK", po::value<int>(&scaleK)->default_value(200), "[MSSE, if computeScale=3] Number of neighbors to take into account during scale computation using k-nearest neighbors")
+            ("scaleRadFactor", po::value<double>(&scaleRadFactor)->default_value(3.0), "[MSSE, if computeScale=2] Defines the search radius for computing MSSE based on the capsule radius (--capRad). The search radius will be capRad * scaleRadFactor.")
+            // Ransac
+            ("fixedRansacThres", po::value<double>(&ransacThres)->default_value(0.7), "Fixed RANSAC threshold (used when computeScale=0).")
+            ("ransacThresFactor", po::value<double>(&ransacT)->default_value(2.5), "Factor to multiply the scale in order to determine the RANSAC threshold (used when computeScale>0")
+            ("minInliers", po::value<int>(&minInliers)->default_value(15), "Minimum number of inliers for the RANSAC local surface fitting to consider it as valid.")
+	        // Capsule search
+            ("capRad", po::value<double>(&capRadPer)->default_value(0.1), "Radius for query capsule's segment, proportional to the minimum bounding sphere radius.")
+            ("weightHFactor", po::value<double>(&weightHFactor)->default_value(1.0), "H constant of the Gaussian weighting used during LocalBivariateQuadric fitting, proportional to the search capsule radius.")
+            // Density
+            ("densityAdaptiveCapRad", po::value<bool>(&computeDensity)->default_value(false), "Use a density-adaptive capsule query radius.")
+	        // Intersection validation
+            ("consensusFact", po::value<double>(&intConsFact)->default_value(0.5), "Factor defining the proportion of the current radius where to search for points in consensus with the intersection, that is, falling inside a sphere search of (current radius)*consesusFact")
+            ("consensusNum", po::value<int>(&intConsNum)->default_value(3), "Number of points falling at a distance smaller than (current radius)*consesusFact in order to consider the intersection as valid.")
+            // Meshing
+            ("ab", po::value<double>(&angularBound)->default_value(10.0), "[Surface Mesher] Angular Bound.")
+            ("rb", po::value<double>(&radiusBound)->default_value(0.1), "[Surface Mesher] Radius Bound.")
+            ("db", po::value<double>(&distanceBound)->default_value(0.1), "[Surface Mesher] Distance Bound.")
+            ("mf", po::value<int>(&manifoldFlag)->default_value(2), "[Surface Mesher] Manifoldness Flag.")
+            ("clean", po::value<bool>(&doCleanResults)->default_value(false), "[Surface Mesher] Try some cleaning steps on the output surface.")
+            // Debug
+            ("outTimes", po::value<bool>(&doOutputTimes)->default_value(true), "Output execution times to txt file.")
+            ("debugOut", po::value<bool>(&mesherDebugOutput)->default_value(false), "Activate debug output.")
+        ;
+
+    // Read parameters from command line
+    po::variables_map vm;
+    po::store(po::parse_command_line(argc, argv, options), vm);
+    po::notify(vm);
+
+    if (vm.count("help") || argc == 1) {
+        std::cout << options << "\n";
+        return 1;
+    }
+    if (outputFile.empty() && outputDir.empty()) {
+        std::cout << "[ERROR] Please set either --outFile or --outDir parameters (or both)." << std::endl;
+        return -1;
+    }
+    if (degree < 1 || degree > 2 ) {
+        std::cerr << "[ERROR] --deg can only be either 1 (a plane) or 2 (a bivariate quadric)." << std::endl;
+        return -1;
+    }
+    if (ransacThresholdType < 0 || ransacThresholdType > 4) {
+        std::cerr << "[ERROR] --computeScale allowed values are 0, 1, 2, 3 or 4 (see help)" << std::endl;
+        return -1;
+    }
 
 	// Initialize some variables...
 	CGAL::Timer timer ; // Reusable timer initialization
@@ -138,13 +170,11 @@ int main ( int argc, char **argv) {
 														  ransacT,
 														  intConsFact, 
 														  intConsNum,
-														  mesherDebugOutput, 
-														  mesherDebugVisualize ) ;
+														  mesherDebugOutput);
+														  //mesherDebugVisualize ) ;
 		
 	// Create the name of the output file
-	std::string str ;
-	std::ostringstream oss( str ) ;
-	std::ostringstream otxt ; // Debug only!	
+	std::ostringstream oss;
 	std::ostringstream otimes ; // Debug only!	
 	std::ostringstream osClean ; // Debug only!
 	string inputFileNameStr ;
@@ -152,7 +182,7 @@ int main ( int argc, char **argv) {
 	size_t indexFileName = inputFilePathStr.find_last_of( "/\\" ) ;
 	size_t indexFileExtension = inputFilePathStr.find_last_of( "." ) ;
 	inputFileNameStr = inputFilePathStr.substr( indexFileName+1, ( indexFileExtension - indexFileName - 1 ) ) ;
-	if ( outputFile == (char*)0 ) {
+	if ( outputFile.empty() ) {
 		oss << outputDir << "/" << inputFileNameStr ;
 		// Related to local surface computation
 		oss << "_" << intOraclePtr->getParametersString() ;
@@ -163,24 +193,14 @@ int main ( int argc, char **argv) {
 		// Related to manifoldness
 		oss << "__mf" << manifoldFlag ;
 
-		otxt << oss.str() << "__coutRedirect.txt" ;
 		otimes << oss.str() << "__RunTimesLog.txt" ;
 		osClean << oss.str() << "__clean.off" ;
 		oss << ".off" ;		
 	}	
 	else {
-		oss << outputDir << "/" << outputFile ;		
+		oss << outputFile ;
 	}
 	cout << "- Output file path: " << oss.str() << endl ;
-
-	// Redirect the output if needed
-	std::ofstream outTxt;
-	if ( doOutputRedirect ) {
-		cout << "- Redirecting output to a txt file..." << endl ;
-		outTxt.open( otxt.str().c_str() ) ;
-		std::streambuf *coutbuf = std::cout.rdbuf() ; //save old buf
-		std::cout.rdbuf( outTxt.rdbuf() ) ;
-	}
 
 	// Show useful info on screen
 	intOraclePtr->debugShowParameters() ;

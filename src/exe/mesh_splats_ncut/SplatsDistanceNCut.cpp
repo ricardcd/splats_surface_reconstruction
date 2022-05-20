@@ -81,40 +81,40 @@ int main ( int argc, char **argv) {
 	std::string inputFile, outputFileDir, outputFileName, outputRunTimesFile ;
 	double angularBound, radiusBound, distanceBound, gaussianRadiusFactor, smoothPow, areaConstant, functionErrorBound, filterRad, bandRadius, defMax, radiusEdgeBound, epsilon, tScale ;
     int manifoldFlag, fixKnn, marchingCubesGridSize, inputType, bandKnn, odepth ;
-	bool doOutputRedirection, doCleanResults, useMarchingCubes, contourAtMedian, doSaveFunctionAtVertices ;
+	bool doCleanResults, useMarchingCubes, contourAtMedian, doSaveFunctionAtVertices, debugOutput ;
 
 	po::options_description options("Splats distance mesher (NCuts)");
 	options.add_options()
 		( "help", "Produce help message" )
-		( "inputFile,i", po::value<std::string>(&inputFile), "Input splats/pts file" )
-		( "inputFileType,it", po::value<int>(&inputType)->default_value(0), "Input file type: 0 = splats / 1 = raw points" ) // / 2 = already computed distance function" )
-		( "outputFileName,ofn", po::value<std::string>(&outputFileName)->default_value("out.off"), "Output file name" )
-		( "outputRunTimesFile,ortf", po::value<std::string>(&outputRunTimesFile)->default_value(""), "Output run times file name (if empty, no log will be made)" )
-		( "outputFileDir,od", po::value<std::string>(&outputFileDir)->default_value("./"), "Output mesh directory" ) 
-		( "angularBound,ab", po::value<double>(&angularBound)->default_value(0.0), "Mesher: angular bound" )
-		( "radiusBound,rb", po::value<double>(&radiusBound)->default_value(0.1), "Mesher: radius bound" )
-		( "distanceBound,db", po::value<double>(&distanceBound)->default_value(0.1), "Mesher: distance bound"  )
-		( "manifoldFlag,mf", po::value<int>(&manifoldFlag)->default_value(2), "Manifoldness Flag" )
-		( "doOutputRedirection,outTxt", po::value<bool>(&doOutputRedirection)->default_value(false), "Output on-screen redirection to txt file" )
-		( "doCleanResults,clean", po::value<bool>(&doCleanResults)->default_value(true), "Try some cleaning steps on the output surface" )
-		( "gaussianRadiusFactor,gh", po::value<double>(&gaussianRadiusFactor)->default_value(0.2), "Blending Gaussian H factor  (w.r.t. the BSR, if 0 < bandRadius < 1, or w.r.t. AS, if bandRadius > 1)" )
-		( "bandRadius,br", po::value<double>(&bandRadius)->default_value(0.4), "Extended band Blending Gaussian H factor  (w.r.t. the BSR, if 0 < bandRadius < 1, or w.r.t. AS, if bandRadius > 1)" )
-		( "smoothPow,sp", po::value<double>(&smoothPow)->default_value(4.0), "Smooth prior on the unsigned function" )
-		( "areaConstant,ac", po::value<double>(&areaConstant)->default_value(1e-5), "Area constant on the unsigned function." )
-		( "functionErrorBound,feb", po::value<double>(&functionErrorBound)->default_value(1e-3), "Maximum allowed error bound between the real implicit function and its linear approximation in the triangulation" )
-		( "filterRad,fr", po::value<double>(&filterRad)->default_value(0.5), "Hallucinated triangles filter radius" )
-		( "fixKnn,k", po::value<int>(&fixKnn)->default_value(-1), "Fix the K-NN used in distance function computation (-1 = unbounded)" )
-		( "bandKnn,bk", po::value<int>(&bandKnn)->default_value(-1), "Fix the K-NN used in the distance function computation for the secondary band (-1 = not used)" )
-		( "defMax,dm", po::value<double>(&defMax)->default_value(1000), "Default maximum" )
-		( "useMarchingCubes,mc", po::value<bool>(&useMarchingCubes)->default_value(false), "Use Marching Cubes instead of the Surface Mesher" )
-		( "marchingCubesGridSize,mcg", po::value<int>(&marchingCubesGridSize)->default_value(500), "Marching Cubes grid size" )
-		( "contourAtMedian,cam", po::value<bool>(&contourAtMedian)->default_value(false), "Use median value of implicit function at input points as the contouring isovalue" )
-		( "radiusEdgeBound,reb", po::value<double>(&radiusEdgeBound)->default_value(2.5), "Radius-edge bound for the initial coarse implicit function" )
+        ("inFile,i", po::value<std::string>(&inputFile), "Input point set file path.")
+        ("outFile,o", po::value<std::string>(&outputFileName), "Output mesh file path (OFF format).")
+        ("outDir", po::value<std::string>(&outputFileDir), "Output directory. If outFile is not specified, a file with a default name containig a list of the parameters used will be written in this directory.")
+		( "inputFileType", po::value<int>(&inputType)->default_value(0), "Input file type: 0 = splats / 1 = raw points (experimental)" ) // / 2 = already computed distance function" )
+		( "outputRunTimesFile", po::value<std::string>(&outputRunTimesFile)->default_value(""), "Output run times file name (if empty, no log will be made)" )
+		( "gaussianRadiusFactor", po::value<double>(&gaussianRadiusFactor)->default_value(0.2), "Blending Gaussian H factor. If 0 < bandRadius < 1, it is a multiplicative factor of the Bounding Sphere Radius. Otherwise, if bandRadius > 1, it is a multiplicative radius to the average spacing between points" )
+        ( "bandRadius", po::value<double>(&bandRadius)->default_value(0.4), "Size of the band where the distance function will be computed. If 0 < bandRadius < 1, it is a multiplicative factor of the Bounding Sphere Radius. Otherwise, if bandRadius > 1, it is a multiplicative radius to the average spacing between points" )
+		( "smoothPow", po::value<double>(&smoothPow)->default_value(4.0), "Smooth prior on the unsigned function" )
+		( "areaConstant", po::value<double>(&areaConstant)->default_value(1e-5), "Area constant on the unsigned function." )
+		( "functionErrorBound", po::value<double>(&functionErrorBound)->default_value(1e-3), "Maximum allowed error bound between the real implicit function and its linear approximation in the triangulation" )
+		( "filterRad", po::value<double>(&filterRad)->default_value(0.5), "Hallucinated triangles filter radius" )
+		( "fixKnn", po::value<int>(&fixKnn)->default_value(-1), "Fix the K-NN used in distance function computation (-1 = unbounded)" )
+		( "bandKnn", po::value<int>(&bandKnn)->default_value(-1), "Fix the K-NN used in the distance function computation for the secondary band (-1 = not used)" )
+		( "defMax", po::value<double>(&defMax)->default_value(1000), "Default maximum" )
+		( "useMarchingCubes", po::value<bool>(&useMarchingCubes)->default_value(false), "Use Marching Cubes instead of the Surface Mesher" )
+		( "marchingCubesGridSize", po::value<int>(&marchingCubesGridSize)->default_value(500), "Marching Cubes grid size" )
+		( "contourAtMedian", po::value<bool>(&contourAtMedian)->default_value(false), "Use median value of implicit function at input points as the contouring isovalue" )
+		( "radiusEdgeBound", po::value<double>(&radiusEdgeBound)->default_value(2.5), "Radius-edge bound for the initial coarse implicit function" )
 		( "doSaveFunctionAtVertices", po::value<bool>(&doSaveFunctionAtVertices)->default_value(false), "[DEBUG Only] Please, do not use..." )
-		( "epsilon,ep", po::value<double>(&epsilon)->default_value(0.001), "Epsilon value used in comparisons" )
-		( "T,t", po::value<double>(&tScale)->default_value(2.5), "multiplicative factor of the scale to eliminate hallucinated triangles" )
-        ( "octreeDepth,od", po::value<int>(&odepth)->default_value(-1), "Octree depth used to filter the input point set before implicit distance creation. If smaller than one, no octree will be used (default = -1)" )
-	;
+		( "epsilon", po::value<double>(&epsilon)->default_value(0.001), "Epsilon value used in comparisons" )
+		( "hallucinatedTrisFactor", po::value<double>(&tScale)->default_value(2.5), "Multiplicative factor of the scale to eliminate hallucinated triangles" )
+        ( "octreeDepth", po::value<int>(&odepth)->default_value(-1), "Octree depth used to filter the input point set before implicit distance creation. If smaller than one, no octree will be used (default = -1)" )
+        ( "debugOutput", po::value<bool>(&debugOutput)->default_value(false), "Activate debug output (will be written in ./_OUT folder).")
+        ( "ab", po::value<double>(&angularBound)->default_value(0.0), "[Surface Mesher] Angular bound" )
+        ( "rb", po::value<double>(&radiusBound)->default_value(0.1), "[Surface Mesher] Radius bound" )
+        ( "db", po::value<double>(&distanceBound)->default_value(0.1), "[Surface Mesher] Distance bound"  )
+        ( "mf", po::value<int>(&manifoldFlag)->default_value(2), "[Surface Mesher] Manifoldness Flag" )
+        ( "clean", po::value<bool>(&doCleanResults)->default_value(true), "[Surface Mesher] Try some cleaning steps on the output surface" )
+    ;
 
 	// Read parameters from command line
 	po::variables_map vm ;
@@ -125,10 +125,10 @@ int main ( int argc, char **argv) {
 
 	po::notify(vm);
 
-	if (vm.count("help")) {
-		cout << options << "\n";
-		return 1;
-	}
+    if (vm.count("help") || argc == 1) {
+        std::cout << options << "\n";
+        return 1;
+    }
 	
 	// Some input parameters check
 	if ( manifoldFlag < 0 || manifoldFlag > 2 ) {
@@ -172,10 +172,6 @@ int main ( int argc, char **argv) {
 									<< "_feb" << functionErrorBound
 									<< "_reb" << radiusEdgeBound ;
 				
-		if ( doOutputRedirection ) {
-			otxt << oss.str() << ".txt" ;
-		}
-
 		osClean << oss.str() << "_c.off" ;
 		osClean2 << oss.str() << "_ch.off" ;
 
@@ -183,22 +179,13 @@ int main ( int argc, char **argv) {
 		
 	}
 	else {
-		oss << outputFileDir << "/" << outputFileName ;
+		oss << outputFileName ;
 		osClean << oss.str() << "_c.off" ;
 		osClean2 << oss.str() << "_ch.off" ;
 	}
 	char* fullOutputFilePath ;
 	fullOutputFilePath = new char [ oss.str().size()+1 ] ;
 	strcpy ( fullOutputFilePath, oss.str().c_str() ) ;
-
-	// Redirect the output if needed
-	std::ofstream outTxt;
-	if ( doOutputRedirection ) {
-		cout << "Redirecting output to a txt file..." << endl ;
-		outTxt.open( otxt.str().c_str() ) ;
-		std::streambuf *coutbuf = std::cout.rdbuf() ; //save old buf
-		std::cout.rdbuf( outTxt.rdbuf() ) ;
-	}
 
 	// Print parameters on screen
 	cout << "- Parameters:" << endl ;
@@ -288,7 +275,8 @@ int main ( int argc, char **argv) {
 										   contourAtMedian, 
 										   bandKnn,
                                            epsilon,
-                                           odepth ) ;
+                                           odepth,
+                                           debugOutput) ;
 	}
 	else {
 		/* Raw point set */
@@ -325,7 +313,9 @@ int main ( int argc, char **argv) {
 										   defMax,
 										   contourAtMedian,
 										   bandKnn, 
-										   epsilon ) ;
+										   epsilon,
+										   odepth,
+										   debugOutput) ;
 	}
 	t = timer.time() ;
 	if ( logTimings ) {
@@ -503,10 +493,6 @@ int main ( int argc, char **argv) {
 			std::cout << "- Resulting surface is manifold, no cleaning required." << std::endl ;
 		}
 	}
-
-	if ( doOutputRedirection )
-		outTxt.close() ;
-
 
 	if ( logTimings ) {
 		if ( logTimings ) otime << "GLOBAL Time = " << globalTimer.time() << "s" << endl ;

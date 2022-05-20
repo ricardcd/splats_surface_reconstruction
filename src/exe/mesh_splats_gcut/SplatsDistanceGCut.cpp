@@ -72,41 +72,40 @@ int main ( int argc, char **argv) {
 	std::string inputSplatsFile, outputFileDir, outputFileName, outputRunTimesFile ;
 	double angularBound, radiusBound, distanceBound, gaussianRadiusFactor, functionErrorBound, radiusEdgeBound, ransacThres, confidenceThres, uncertainBand, smoothPrior, areaConstant, stWeight, dataWeight, filterRad, bandRadius, epsilon, tScale ;
     int manifoldFlag, k, numRays, bandKnn, odepth ;
-	bool doOutputRedirection, doCleanResults, boundedSurface, signPointsOutsideBand ;
+	bool doCleanResults, boundedSurface, signPointsOutsideBand ;
 
 	po::options_description options("Splats distance mesher (GraphCuts)");
 	options.add_options()
 		( "help", "Produce help message" )
-		( "inputSplatsFile,i", po::value<std::string>(&inputSplatsFile), "Input splats file" )
-		( "outputFileDir,od", po::value<std::string>(&outputFileDir), "Output mesh directory" )
-		( "outputFileName,ofn", po::value<std::string>(&outputFileName), "Output file name" )
-		( "angularBound,ab", po::value<double>(&angularBound)->default_value(0.0), "Mesher: angular bound" )
-		( "radiusBound,rb", po::value<double>(&radiusBound)->default_value(0.1), "Mesher: radius bound" )
-		( "distanceBound,db", po::value<double>(&distanceBound)->default_value(0.1), "Mesher: distance bound"  )
-		( "manifoldFlag,mf", po::value<int>(&manifoldFlag)->default_value(2), "Manifoldness Flag" )
-		( "doOutputRedirection,outTxt", po::value<bool>(&doOutputRedirection)->default_value(false), "Output on-screen redirection to txt file" )
-		( "doCleanResults,clean", po::value<bool>(&doCleanResults)->default_value(true), "Try some cleaning steps on the output surface" )
-		( "gaussianRadiusFactor,gh", po::value<double>(&gaussianRadiusFactor)->default_value(0.2), "Blending Gaussian H factor  (w.r.t. the BSR, if 0 < bandRadius < 1, or w.r.t. AS, if bandRadius > 1)" )
-		( "functionErrorBound,feb", po::value<double>(&functionErrorBound)->default_value(1e-3), "Maximum allowed error bound between the real implicit function and its linear approximation in the triangulation" )
-		( "radiusEdgeBound,reb", po::value<double>(&radiusEdgeBound)->default_value(2.5), "Radius-edge bound for the implicit function" )
-		( "fixKnn,k", po::value<int>(&k)->default_value(-1), "Number of closest splats to take into account. If set to < 0, then all the splats inside the radial neighborhood defined by gh will be taken into account." )
-		( "numRays,rays", po::value<int>(&numRays)->default_value(50), "Number of Random rays to try during in/out check" )
-		( "ransacThres,rt", po::value<double>(&ransacThres)->default_value(0.1), "RANSAC-intersection threshold" )
-		( "confidenceThres,ct", po::value<double>(&confidenceThres)->default_value(0.7), "Confidence threshold used in initial in/out labelling" )
-		( "uncertainBand,ub", po::value<double>(&uncertainBand)->default_value(1.0), "Uncertain band (points under this value in the unsigned function will not be taken into account" )
-		( "smoothPrior,sp", po::value<double>(&smoothPrior)->default_value(4.0), "Smooth prior on the unsigned function" )
-		( "areaConstant,ac", po::value<double>(&areaConstant)->default_value(1e-5), "Area constant on the unsgned function" )
-		( "stWeight,stw", po::value<double>(&stWeight)->default_value(1e5), "Weight to apply to S-T links (multiplies a confidence value ranging from 0 to 1)" )
-		( "dataWeight,dw", po::value<double>(&dataWeight)->default_value(1.0), "Weight to apply to Data links" )
-		( "boundedSurface,bounded", po::value<bool>(&boundedSurface)->default_value(false), "Toggles the bounded surfaces trick" )
-		( "outputRunTimesFile,ortf", po::value<std::string>(&outputRunTimesFile)->default_value(""), "Output run times file name (if empty, no log will be made)" )
-		( "filterRad,fr", po::value<double>(&filterRad)->default_value(0.2), "Hallucinated triangles filter radius" )
-		( "bandRadius,br", po::value<double>(&bandRadius)->default_value(0.4), "Extended band Blending Gaussian H factor (w.r.t. the BSR, if 0 < bandRadius < 1, or w.r.t. AS, if bandRadius > 1)" )
-		( "bandKnn,bk", po::value<int>(&bandKnn)->default_value(-1), "Fix the K-NN used in the distance function computation for the secondary band (-1 = not used)" )
-		( "epsilon,ep", po::value<double>(&epsilon)->default_value(0.001), "Epsilon value used in comparisons" )
-		( "signAllPointsOutsideBand,sa", po::value<bool>(&signPointsOutsideBand)->default_value(false), "Toggles the signing confidence on ALL points outside the band (more costly!)" )
-		( "T,t", po::value<double>(&tScale)->default_value(2.5), "multiplicative factor of the scale to eliminate hallucinated triangles" )
-        ( "octreeDepth,od", po::value<int>(&odepth)->default_value(-1), "Octree depth used to filter the input point set before implicit distance creation. If smaller than one, no octree will be used (default = -1)" )
+        ("inFile,i", po::value<std::string>(&inputSplatsFile), "Input point set file path.")
+        ("outFile,o", po::value<std::string>(&outputFileName), "Output mesh file path (OFF format).")
+        ("outDir", po::value<std::string>(&outputFileDir), "Output directory. If outFile is not specified, a file with a default name containig a list of the parameters used will be written in this directory.")
+		( "gaussianRadiusFactor", po::value<double>(&gaussianRadiusFactor)->default_value(0.2), "Blending Gaussian H factor. If 0 < bandRadius < 1, it is a multiplicative factor of the Bounding Sphere Radius. Otherwise, if bandRadius > 1, it is a multiplicative radius to the average spacing between points" )
+        ( "bandRadius", po::value<double>(&bandRadius)->default_value(0.4), "Size of the band where the distance function will be computed.. If 0 < bandRadius < 1, it is a multiplicative factor of the Bounding Sphere Radius. Otherwise, if bandRadius > 1, it is a multiplicative radius to the average spacing between points" )
+        ( "bandKnn", po::value<int>(&bandKnn)->default_value(-1), "Fix the K-NN used in the distance function computation for the secondary band (-1 = not used)" )
+        ( "functionErrorBound", po::value<double>(&functionErrorBound)->default_value(1e-3), "Maximum allowed error bound between the real implicit function and its linear approximation in the triangulation" )
+		( "radiusEdgeBound", po::value<double>(&radiusEdgeBound)->default_value(2.5), "Radius-edge bound for the implicit function" )
+		( "fixKnn", po::value<int>(&k)->default_value(-1), "Number of closest splats to take into account. If set to < 0, then all the splats inside the radial neighborhood defined by gh will be taken into account." )
+		( "numRays", po::value<int>(&numRays)->default_value(50), "Number of Random rays to try during in/out check" )
+		( "ransacThres", po::value<double>(&ransacThres)->default_value(0.1), "RANSAC-intersection threshold" )
+		( "confidenceThres", po::value<double>(&confidenceThres)->default_value(0.7), "Confidence threshold used in initial in/out labelling" )
+		( "uncertainBand", po::value<double>(&uncertainBand)->default_value(0.01), "Uncertain band (points under this value in the unsigned function will not be taken into account" )
+		( "smoothPrior", po::value<double>(&smoothPrior)->default_value(4.0), "Smooth prior on the unsigned function" )
+		( "areaConstant", po::value<double>(&areaConstant)->default_value(1e-5), "Area constant on the unsgned function" )
+		( "stWeight", po::value<double>(&stWeight)->default_value(1e5), "Weight to apply to S-T links (multiplies a confidence value ranging from 0 to 1)" )
+		( "dataWeight", po::value<double>(&dataWeight)->default_value(1.0), "Weight to apply to Data links" )
+		( "boundedSurface", po::value<bool>(&boundedSurface)->default_value(false), "Toggles the bounded surfaces trick" )
+		( "outputRunTimesFile", po::value<std::string>(&outputRunTimesFile)->default_value(""), "Output run times file name (if empty, no log will be made)" )
+		( "filterRad", po::value<double>(&filterRad)->default_value(0.2), "Hallucinated triangles filter radius" )
+		( "epsilon", po::value<double>(&epsilon)->default_value(0.001), "Epsilon value used in distance comparisons" )
+		( "signAllPointsOutsideBand", po::value<bool>(&signPointsOutsideBand)->default_value(false), "Toggles the signing confidence on ALL points outside the band (more costly!)" )
+		( "hallucinatedTrisFactor", po::value<double>(&tScale)->default_value(2.5), "Multiplicative factor of the scale to eliminate hallucinated triangles" )
+        ( "octreeDepth", po::value<int>(&odepth)->default_value(-1), "Octree depth used to filter the input point set before implicit distance creation. If smaller than one, no octree will be used (default = -1)" )
+        ( "ab", po::value<double>(&angularBound)->default_value(0.0), "[Surface Mesher] Angular bound" )
+        ( "rb", po::value<double>(&radiusBound)->default_value(0.1), "[Surface Mesher] Radius bound" )
+        ( "db", po::value<double>(&distanceBound)->default_value(0.1), "[Surface Mesher] Distance bound"  )
+        ( "mf", po::value<int>(&manifoldFlag)->default_value(2), "[Surface Mesher] Manifoldness Flag" )
+        ( "clean", po::value<bool>(&doCleanResults)->default_value(true), "[Surface Mesher] Try some cleaning steps on the output surface" )
 	;
 		
 	// Read parameters from command line
@@ -118,10 +117,10 @@ int main ( int argc, char **argv) {
 
 	po::notify(vm);
 
-	if (vm.count("help")) {
-		cout << options << "\n";
-		return 1;
-	}
+    if (vm.count("help") || argc == 1) {
+        std::cout << options << "\n";
+        return 1;
+    }
 	
 	// --- Debug (Start) ---
 	//std::cout << "inputSplatsFile = " << inputSplatsFile << std::endl ;
@@ -185,10 +184,6 @@ int main ( int argc, char **argv) {
 									<< "_stw" << stWeight
 									<< "_feb" << functionErrorBound
 									<< "_reb" << radiusEdgeBound ;
-				
-		if ( doOutputRedirection ) {
-			otxt << oss.str() << ".txt" ;
-		}
 
 		osClean << oss.str() << "_c.off" ;
 		osClean2 << oss.str() << "_ch.off" ;
@@ -197,7 +192,7 @@ int main ( int argc, char **argv) {
 		
 	}
 	else {
-		oss << outputFileDir << "/" << outputFileName ;
+		oss << outputFileName ;
 		osClean << oss.str() << "_c.off" ;
 		osClean2 << oss.str() << "_ch.off" ;
 	}
@@ -205,15 +200,6 @@ int main ( int argc, char **argv) {
 	fullOutputFilePath = new char [ oss.str().size()+1 ] ;
 	strcpy ( fullOutputFilePath, oss.str().c_str() ) ;
 	
-	// Redirect the output if needed
-	std::ofstream outTxt;
-	if ( doOutputRedirection ) {
-		cout << "Redirecting output to a txt file..." << endl ;
-		outTxt.open( otxt.str().c_str() ) ;
-		std::streambuf *coutbuf = std::cout.rdbuf() ; //save old buf
-		std::cout.rdbuf( outTxt.rdbuf() ) ;
-	}
-
 	// Print parameters on screen
 	cout << "- Parameters:" << endl ;
 	cout << "    Input file: " << inputSplatsFile << endl ;
@@ -419,10 +405,6 @@ int main ( int argc, char **argv) {
 		else {
 			std::cout << "- Resulting surface is manifold, no cleaning required." << std::endl ;
 		}
-	}
-
-	if ( doOutputRedirection ) {
-		outTxt.close() ;
 	}
 
 	if ( logTimings ) {

@@ -163,7 +163,8 @@ public:
 							const int bandKnn = -1,
 							const double epsilon = 0.001,
                             const bool signPointsOutsideBand = false,
-                            const int odepth = -1 )
+                            const int odepth = -1,
+                            const bool debugOutput = false )
 	: m_tr(new Triangulation) 
 	{
 		m_k = k ;
@@ -183,6 +184,7 @@ public:
 		m_bandKnn = bandKnn ;
 		m_epsilon = epsilon ;
 		m_signPointsOutsideBand = signPointsOutsideBand ;
+		m_debugOutput = debugOutput;
 		
 		FT factor = gaussianRadiusFactor ;
 		if ( m_k > 0 && ( gaussianRadiusFactor < 0 || gaussianRadiusFactor > 1 ) ) {
@@ -191,10 +193,12 @@ public:
 		}
 		
 		// --- Debug (Start) ---
-		// Initialize output directory
-		boost::filesystem::path dir( "./_OUT" ) ;
-		if (boost::filesystem::create_directory( dir ) )
-			std::cout << "[DEBUG] Created Debug Output Directory (./_OUT)" << "\n";
+		if (m_debugOutput) {
+            // Initialize output directory
+            boost::filesystem::path dir("./_OUT");
+            if (boost::filesystem::create_directory(dir))
+                std::cout << "[DEBUG] Created Debug Output Directory (./_OUT)" << "\n";
+        }
 		// --- Debug  (End)  ---
 
 		// Extract centers
@@ -226,6 +230,8 @@ public:
             std::cout << "done" << std::endl ;
         }
 
+        // Add steiner points in the corners of an slightly enlarged bounding box
+        this->addBoundingBoxSteinerPoints(points);
 		
 		// Construct the KD-Tree with these center points
 		m_pTree = pNNTree( new NNTree( boost::make_zip_iterator(boost::make_tuple( points.begin(), splats.begin() ) ),
@@ -315,7 +321,43 @@ public:
 
 	}
 
+    void addBoundingBoxSteinerPoints(const std::vector< Point_3 >& points) {
+        // Determine min/max of the given set of points
+        FT min_x = points[0].x() ;
+        FT min_y = points[0].y() ;
+        FT min_z = points[0].z() ;
 
+        FT max_x = points[0].x() ;
+        FT max_y = points[0].y() ;
+        FT max_z = points[0].z() ;
+
+
+        typename std::vector<Point_3>::const_iterator it ;
+        for ( it = points.begin();
+              it != points.end();
+              ++it )
+        {
+            if ( it->x() < min_x ) min_x = it->x() ;
+            if ( it->y() < min_y ) min_y = it->y() ;
+            if ( it->z() < min_z ) min_z = it->z() ;
+            if ( it->x() > max_x ) max_x = it->x() ;
+            if ( it->y() > max_y ) max_y = it->y() ;
+            if ( it->z() > max_z ) max_z = it->z() ;
+        }
+
+        // Steiner points
+        std::vector<Point_3> steinerBB;
+        steinerBB.push_back(Point_3(min_x, min_y, min_z));
+        steinerBB.push_back(Point_3(min_x, max_y, min_z));
+        steinerBB.push_back(Point_3(min_x, max_y, max_z));
+        steinerBB.push_back(Point_3(min_x, min_y, max_z));
+        steinerBB.push_back(Point_3(max_x, min_y, min_z));
+        steinerBB.push_back(Point_3(max_x, max_y, min_z));
+        steinerBB.push_back(Point_3(max_x, max_y, max_z));
+        steinerBB.push_back(Point_3(max_x, min_y, max_z));
+
+        m_tr->insert( steinerBB.begin(), steinerBB.end() ) ;
+	}
 	
 	/// Compute the implicit function at the vertices of a refined triangulation (similar to an octree decomposition)
 	bool compute_implicit_function() {
@@ -413,33 +455,40 @@ public:
 
 	bool sign_implicit_function() {
 
-		// --- Debug (Start) ---
-		if ( m_maxVal < m_uncertainBand ) {
-			std::cout << "[WARNING] Maximum value computed on the implicit function is lower than the uncertain band..." << std::endl ;
-			m_uncertainBand = m_maxVal ;
-		}
-		// --- Debug  (End)  ---
+        // --- Debug (Start) ---
+        if (m_maxVal < m_uncertainBand) {
+            std::cout << "[WARNING] Maximum value computed on the implicit function is lower than the uncertain band..."
+                      << std::endl;
+            m_uncertainBand = m_maxVal;
+        }
+        // --- Debug  (End)  ---
 
-		// Create graph structure
-		
-		GraphType g( /*estimated # of nodes*/ m_tr->number_of_vertices(), /*estimated # of edges*/ m_tr->number_of_edges() ) ; 
-		g.add_node( m_tr->number_of_vertices() ) ;
+        // Create graph structure
 
-		// Fill graph
-		if ( m_signPointsOutsideBand )
-			computeSTWeights( g ) ;
-		else
-			computeSTWeightsRestricted( g ) ;
-		computeSmoothWeights( g ) ;
-		
-		std::cout << "    - Graph cut..." << std::flush ;
-		CGAL::Timer task_timer; task_timer.start() ;
-		int flow = g.maxflow();
-		std::cout << "done (" << task_timer.time() << "s )" << std::endl ;
+        GraphType g( /*estimated # of nodes*/ m_tr->number_of_vertices(), /*estimated # of edges*/
+                                              m_tr->number_of_edges());
+        g.add_node(m_tr->number_of_vertices());
 
-		// --- Debug (Start) ---
-		std::ofstream ofio( "./_OUT/InsideVertices_OPT.xyz", std::ios_base::out ) ;
-		std::ofstream ofoo( "./_OUT/OutsideVertices_OPT.xyz", std::ios_base::out ) ;
+        // Fill graph
+        if (m_signPointsOutsideBand)
+            computeSTWeights(g);
+        else
+            computeSTWeightsRestricted(g);
+        computeSmoothWeights(g);
+
+        std::cout << "    - Graph cut..." << std::flush;
+        CGAL::Timer task_timer;
+        task_timer.start();
+        int flow = g.maxflow();
+        std::cout << "done (" << task_timer.time() << "s )" << std::endl;
+
+        // --- Debug (Start) ---
+        std::ofstream ofio;
+        std::ofstream ofoo;
+        if (m_debugOutput) {
+            ofio.open("./_OUT/InsideVertices_OPT.xyz", std::ios_base::out);
+            ofoo.open("./_OUT/OutsideVertices_OPT.xyz", std::ios_base::out);
+        }
 		// --- Debug  (End)  ---
 
 		Finite_vertices_iterator v, e;
@@ -454,19 +503,23 @@ public:
 				v->f() = -v->f() ;
 				if (!any1) any1 = true ;
 				// --- Debug (Start) ---
-				ofio << v->point() << std::endl ;
+				if (m_debugOutput)
+				    ofio << v->point() << std::endl ;
 				// --- Debug  (End)  ---
 			}
 			// --- Debug (Start) ---
 			else {
 				if (!any2) any2 = true ;
-				ofoo << v->point() << std::endl ;
+				if (m_debugOutput)
+				    ofoo << v->point() << std::endl ;
 			}
 			// --- Debug  (End)  ---
 		}
 		// --- Debug (Start) ---
-		ofio.close() ;
-		ofoo.close() ;
+        if (m_debugOutput) {
+            ofio.close();
+            ofoo.close();
+        }
 		// --- Debug  (End)  ---
 
 		// Check correctness of signing
@@ -913,7 +966,7 @@ private:
 	int m_bandKnn ;
 	FT m_epsilon ;
 	bool m_signPointsOutsideBand ;
-
+    bool m_debugOutput;
 
 
 	/* Functions */
@@ -1256,23 +1309,24 @@ private:
 						  << std::endl ;
 		
 
-		// --- Debug (Start) ---		
-		i = 0 ;
-		std::ofstream ofi( "./_OUT/InsideVertices_Init.xyz", std::ios_base::out ) ;
-		std::ofstream ofo( "./_OUT/OutsideVertices_Init.xyz", std::ios_base::out ) ;
-		for( v = m_tr->finite_vertices_begin(), e = m_tr->finite_vertices_end();
-			 v != e;
-			 ++v, i++ )
-		{
-			if ( odds[i] != 0 | evens[i] != 0 ) {
-				if ( odds[i] > evens[i] )
-					ofi << v->point() << std::endl ;
-				else
-					ofo << v->point() << std::endl ;
-			}
-		}
-		ofi.close() ;
-		ofo.close() ;
+		// --- Debug (Start) ---
+		if (m_debugOutput) {
+            i = 0;
+            std::ofstream ofi("./_OUT/InsideVertices_Init.xyz", std::ios_base::out);
+            std::ofstream ofo("./_OUT/OutsideVertices_Init.xyz", std::ios_base::out);
+            for (v = m_tr->finite_vertices_begin(), e = m_tr->finite_vertices_end();
+                 v != e;
+                 ++v, i++) {
+                if (odds[i] != 0 | evens[i] != 0) {
+                    if (odds[i] > evens[i])
+                        ofi << v->point() << std::endl;
+                    else
+                        ofo << v->point() << std::endl;
+                }
+            }
+            ofi.close();
+            ofo.close();
+        }
 		// --- Debug (End) ---
 
 		task_timer.reset() ;
@@ -1280,8 +1334,12 @@ private:
 		std::cout << "    - Building graph (S-T weights)..." ;
 
 		// --- Debug (Start) ---
-		std::ofstream ofis( "./_OUT/InsideVertices_SOURCE.xyz", std::ios_base::out ) ;
-		std::ofstream ofos( "./_OUT/OutsideVertices_SINK.xyz", std::ios_base::out ) ;
+        std::ofstream ofis;
+        std::ofstream ofos;
+		if (m_debugOutput) {
+            ofis.open("./_OUT/InsideVertices_SOURCE.xyz", std::ios_base::out);
+            ofos.open("./_OUT/OutsideVertices_SINK.xyz", std::ios_base::out);
+        }
 		// --- Debug  (End)  ---
 
 		
@@ -1331,12 +1389,13 @@ private:
 										confidenceO*m_stWeight  /* capacities for Inside label */ ) ;
 
 					// --- Debug (Start) ---
-					if ( odds[i] > evens[i] ) {
-						ofis << v->point() << std::endl ;
-					}
-					else {
-						ofos << v->point() << std::endl ;
-					}
+                    if (m_debugOutput) {
+                        if (odds[i] > evens[i]) {
+                            ofis << v->point() << std::endl;
+                        } else {
+                            ofos << v->point() << std::endl;
+                        }
+                    }
 					// --- Debug  (End)  ---
 				}
 				else {
@@ -1351,8 +1410,10 @@ private:
 		}
 
 		//// --- Debug (Start) ---
-		ofis.close() ;
-		ofos.close() ;
+		if (m_debugOutput) {
+            ofis.close();
+            ofos.close();
+        }
 		// --- Debug  (End)  ---
 		std::cout << "\b\b\b\b100%, done (" << task_timer.time() << ")" << std::endl ;
 	}
@@ -1362,9 +1423,12 @@ private:
 	void computeSTWeightsRestricted( GraphType& g ) {
 
 		// --- Debug (Start) ---
-		std::ofstream oi( "./_OUT/PointsInInterphase.xyz", std::ios_base::out ) ;
-		std::ofstream o_in( "./_OUT/PointsInInterphase_IN.xyz", std::ios_base::out ) ;
-		std::ofstream o_out( "./_OUT/PointsInInterphase_OUT.xyz", std::ios_base::out ) ;
+        std::ofstream oi, o_in, o_out;
+        if (m_debugOutput) {
+            oi.open("./_OUT/PointsInInterphase.xyz", std::ios_base::out);
+            o_in.open("./_OUT/PointsInInterphase_IN.xyz", std::ios_base::out);
+            o_out.open("./_OUT/PointsInInterphase_OUT.xyz", std::ios_base::out);
+        }
 		// --- Debug  (End)  ---
 
 		std::cout << "    - Building graph (s-t weights)..." ;

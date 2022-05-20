@@ -16,7 +16,6 @@
 #include <limits>
 #include <algorithm>
 #include <boost/program_options.hpp>
-#include "CImg.h"
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
 typedef K::FT										FT;
@@ -32,28 +31,49 @@ namespace po = boost::program_options;
 int main ( int argc, char **argv) {
 
 	/* Parse input parameters */
-	cimg_usage( "Compute splats for pointsets." ) ;
+	std::string inputFile, outputFile, outputDir;
+	int inputType, neighType, distType, k, minInliers, minFitPts, scaleK;
+	double neighRadius, multFact, maxSize, quantile, p, epsilon, ransacThres;
+	unsigned int lssDegree;
+	bool saveTime = false, preComputeScale = false;
 
-	const char*			inputFile = cimg_option( "-i",				(char*)0, "Input Point Set file." ) ;
-	const char*			outputFile = cimg_option( "-o",				(char*)0, "Output file." ) ;
-	const char*			outputDir = cimg_option( "-od",				(char*)0, "Output file." ) ;
-	const int			inputType = cimg_option( "-inputType",		0, "Input type: 0 = Pointset / 1 = Oriented Pointset / 2 = Oriented Pointset With Scores." ) ;
-	const int			neighType = cimg_option( "-neighType",		0, "Neighborhood type: 0 = k-NN (default) / 1 = Radial k-NN." ) ;
-	const double		neighRadius = cimg_option( "-radius",		numeric_limits<double>::infinity(), "Radial k-NN distance (default = Infinity)." ) ;
-	const int			distType = cimg_option( "-distanceType",	0, "Distance type: 0 = k-NN (3D) / 1 = k-NN (2D) / 2 = Radius to enclosing 2D circle." ) ;
-	const int			k = cimg_option( "-k",						0, "Number of nearest neighbors to take into account." ) ;
-	const double		multFact = cimg_option( "-multFactor",		1.0, "Multiplicative factor" ) ;	
-	const unsigned int	lssDegree = cimg_option( "-d",				2, "local smooth surface degree." ) ;
-	const double		maxSize = cimg_option( "-maxDiscSize",		numeric_limits<double>::infinity(), "Maximum disc size." ) ;
-	const int			minInliers = cimg_option( "-minInliers",	15, "Minimum number of inliers for the ransac plane fitting in order to take into account this splat." ) ;
-	const int			minFitPts = cimg_option( "-minFitPts",		6, "Minimum number of points to generate a splat approximation." ) ;
-	const bool			saveTime = cimg_option( "-saveTime",		true, "Flag indicating wether the time has to be saved in a separated file (same name as output file, but ended with __time.txt)." ) ;	
-	const bool			preComputeScale = cimg_option( "-computeScale", true, "Flag indicating wether the scale of the noise has to be computed" ) ;			
-	const int           scaleK = cimg_option( "-scaleK",    500, "Neighborhood to compute the scale from." ) ;			
-	const double		quantile = cimg_option( "-quantile",		0.3, "Maximum deviation from computed local smooth surface." ) ;
-	const double		p = cimg_option( "-p",						0.99, "Probability of getting a sample free from outliers in the LKS procedure." ) ;
-	const double		epsilon = cimg_option( "-epsilon",			0.7, "Expected percentage of outliers for the LKS procedure." ) ;
-	const double		ransacThres = cimg_option( "-rt",			0.7, "RANSAC threshold." ) ;
+	po::options_description options("Computes splats from a point sets");
+	options.add_options()
+            ("help,h", "Produce help message")
+			("inFile,i", po::value<std::string>(&inputFile), "Input point set file path.")
+			("outFile,o", po::value<std::string>(&outputFile), "Output mesh file path (OFF format).")
+			("outDir", po::value<std::string>(&outputDir), "Output directory. If outFile is not specified, a file with a default name containig a list of the parameters used will be written in this directory.")
+			("inputType", po::value<int>(&inputType)->default_value(0), "Input type: 0 = Pointset / 1 = Oriented Pointset / 2 = Oriented Pointset With Scores.")
+			("neighType", po::value<int>(&neighType)->default_value(0), "Neighborhood type: 0 = k-Nearest Neighbors (default) / 1 = Radially-Nearest Neighbors.")
+			("radius", po::value<double>(&neighRadius)->default_value(numeric_limits<double>::infinity()), "Radial Nearest Neighbors distance (only used if neighType == 1)")			
+			("knn,k", po::value<int>(&k)->default_value(25), "Number of nearest neighbors to take into account (only used if neighType == 0)")
+            ("lssDegree,d", po::value<unsigned int>(&lssDegree)->default_value(2), "Degree of the local smooth surface computed for each splat.")
+            ("maxDiscSize", po::value<double>(&maxSize)->default_value(numeric_limits<double>::infinity()), "Maximum size (i.e., radial coverage) of a splat.")
+            ("minInliers", po::value<int>(&minInliers)->default_value(15), "Minimum number of inliers for the RANSAC plane fitting (the local reference plane of the splat).")
+            ("ransacThres,t", po::value<double>(&ransacThres)->default_value(0.7), "RANSAC threshold")
+            ("minFitPts", po::value<int>(&minFitPts)->default_value(6), "Minimum number of fitting points required to generate a splat (corresponds to the minimum number of points needed by RANSAC to fit a local surface of the selected degree).")
+            ("saveTime", po::bool_switch(&saveTime), "If set, the run time will be saved in a separate file.")
+            ("preComputeScale", po::bool_switch(&preComputeScale), "If set, the scale of the noise will be estimated")
+            ("scaleK", po::value<int>(&scaleK)->default_value(500), "Number of nearest neighbors used to compute the scale (only used if --preComputeScale is set).")
+            ("scaleQuantile", po::value<double>(&quantile)->default_value(0.3), "Quantile of the Least Kth Squares (LKS) procedure used to compute the scale of the noise (only used if --preComputeScale is set).")
+            ("scaleProbNoOutliers", po::value<double>(&p)->default_value(0.99), "Probability of getting a sample free of outliers for the LKS for computing the scale of the noise (only used if --preComputeScale is set).")
+            ("scaleExpectedOutliersPercent", po::value<double>(&epsilon)->default_value(0.7), "Expected percentage of outliers for the LKS for computing the scale of the noise (only used if --preComputeScale is set).")
+       ;
+
+    // Read parameters from command line
+    po::variables_map vm;
+    po::store(po::parse_command_line(argc, argv, options), vm);
+    po::notify(vm);
+
+    if (vm.count("help") || argc == 1) {
+        std::cout << options << "\n";
+        return 1;
+    }
+
+    if (outputFile.empty() && outputDir.empty()) {
+        std::cout << "[ERROR] Please set either --outFile or --outDir parameters (or both)." << std::endl;
+        return -1;
+    }
 
 	CGAL::Timer timer ; // Reusable timer initialization
 	CGAL::Timer globalTimer ; // Global timer
@@ -72,7 +92,7 @@ int main ( int argc, char **argv) {
 	switch( inputType ) {
 	case 0:
 		// Simple pointsets
-		readed = PointSetReader< Point_3, Vector_3 >::readPointsetFile( inputFile, points ) ;
+		readed = PointSetReader< Point_3, Vector_3 >::readPointsetFile( inputFile.c_str(), points ) ;
 		if ( readed ) {
 			sc = SplatsCreator( points ) ;
 		}
@@ -82,7 +102,7 @@ int main ( int argc, char **argv) {
 		break ;
 	case 1:
 		// Oriented pointsets
-		readed = PointSetReader< Point_3, Vector_3 >::readOrientedPointsetFile( inputFile, points, normals ) ;
+		readed = PointSetReader< Point_3, Vector_3 >::readOrientedPointsetFile( inputFile.c_str(), points, normals ) ;
 		if ( readed ) {
 			sc = SplatsCreator( points, normals ) ;
 		}
@@ -106,7 +126,7 @@ int main ( int argc, char **argv) {
 	/* Set Parameters */
 	sc.setNeighType( neighType ) ;
 	sc.setNeighRadius( neighRadius ) ;
-	sc.setDistType( distType ) ;
+	// sc.setDistType( distType ) ;
 	sc.setK( k ) ;
 	sc.setScaleK( scaleK ) ;
 	sc.setLssDegree( lssDegree ) ;
@@ -123,7 +143,7 @@ int main ( int argc, char **argv) {
 	std::ostringstream oss( str ) ;
 	std::ostringstream otxt ; // Debug only!	
 	std::string baseFileName ;
-	if ( outputFile == (char*)0 ) {
+	if ( outputFile.empty() ) {
 		string inputFilePathStr( inputFile ) ;
 		size_t indexFileName = inputFilePathStr.find_last_of( "/\\" ) ;
 		size_t indexFileExtension = inputFilePathStr.find_last_of( "." ) ;
@@ -137,7 +157,7 @@ int main ( int argc, char **argv) {
 		oss << ".splat" ;		
 	}	
 	else {
-		if ( outputDir == (char*)0 ) {
+		if ( outputDir.empty() ) {
 			oss << outputFile ;
 		}
 		else {
@@ -149,8 +169,6 @@ int main ( int argc, char **argv) {
 
 	if ( preComputeScale ) {
 		if ( !sc.loadPrecomputedScales( outputDir, baseFileName ) ) {
-	
-
 			cout << "- Pre-computing scales..." ;
 			timer.start() ;
 			std::vector< Splat_3 > splats ;

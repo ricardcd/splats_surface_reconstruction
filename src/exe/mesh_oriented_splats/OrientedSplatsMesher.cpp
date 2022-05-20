@@ -24,11 +24,11 @@
 	// General
 #include <CGAL/Random.h>
 	// Timer (debugging)
-#include <CGAL/Timer.h>	
+#include <CGAL/Timer.h>
+    // Boost
+#include <boost/program_options.hpp>
 // Scale estimation
 #include "RobustStatistics/ScaleEstimation.h"
-// CImg include (only used here for easily dealing with input parameters)
-#include "CImg.h"
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K ;
 
@@ -52,6 +52,8 @@ typedef CGAL::Implicit_surface_3< K,
 
 // Other definitions
 using namespace std ;
+namespace po = boost::program_options;
+
 
 int removeHallucinatedTriangles2( C2t3 &mesh, const OrientedSplatsDistance &func, double t ) ; // Defined below
 
@@ -59,20 +61,42 @@ int removeHallucinatedTriangles2( C2t3 &mesh, const OrientedSplatsDistance &func
 int main ( int argc, char **argv) {
 
 	// Parse/default input parameters
-	const char*		inputSplatsFile			= cimg_option( "-i",		(char*)0,		"Input oriented splats file" ) ;	
-	const char*		outputFileDir			= cimg_option( "-od",		(char*)0,		"Output mesh directory" ) ;
-	const char*		outputFileName			= cimg_option( "-ofn",		(char*)0,		"Output file name" ) ;
-	const double	angularBound			= cimg_option( "-ab",		10.0,			"Angular bound" ) ;
-	const double	radiusBound				= cimg_option( "-rb",		0.1,			"Radius bound" ) ;
-	const double	distanceBound			= cimg_option( "-db",		0.1,			"Distance bound" ) ;
-	const int		manifoldFlag			= cimg_option( "-mf",		2,				"Manifoldness Flag" ) ;	
-	const int		k						= cimg_option( "-k",		5,				"Number of closest splats to take into account. If set to < 0, then all the splats inside the radial neighborhood defined by gh will be taken into account." ) ;
-	const double	gaussianRadiusFactor	= cimg_option( "-gh",		0.2,			"Blending Gaussian H factor (w.r.t. the BSR)" ) ;
-	const bool		doOutputRedirection		= cimg_option( "-outTxt",	false,			"Output on-screen redirection to txt file" ) ;		
-	const bool		doCleanResults			= cimg_option( "-clean",	true,			"Try some cleaning steps on the output surface" ) ;	
-	const double	epsilon					= cimg_option( "-ep",		0.001,			"Error epsilon" ) ;
-	
+	std::string inputSplatsFile, outputFileName, outputFileDir;
+	double angularBound, radiusBound, distanceBound, gaussianRadiusFactor, epsilon;
+	int manifoldFlag, k;
+	bool doCleanResults = false;
+
+    po::options_description options("Meshes a set of splats, assuming that the input is properly oriented. It computes a signed distance function (SDF) on an adaptive data structure, and then meshes it.");
+    options.add_options()
+            ("help,h", "Produce help message")
+            ("inFile,i", po::value<std::string>(&inputSplatsFile), "Input point set file path.")
+            ("outFile,o", po::value<std::string>(&outputFileName), "Output mesh file path (OFF format).")
+            ("outDir", po::value<std::string>(&outputFileDir), "Output directory. If outFile is not specified, a file with a default name containig a list of the parameters used will be written in this directory.")
+            ("ab", po::value<double>(&angularBound)->default_value(10), "Surface Mesher's Angular bound")
+            ("rb", po::value<double>(&radiusBound)->default_value(0.1), "Surface Mesher's Radius bound")
+            ("db", po::value<double>(&distanceBound)->default_value(0.1), "Surface Mesher's Distance bound")
+            ("mf", po::value<int>(&manifoldFlag)->default_value(2), "Surface Mesher's manifoldness flag (0 == Manifold, 1 == Manifold with boundary, 2 = Non-manifold)")
+            ("knn,k", po::value<int>(&k)->default_value(5), "Number of nearby splats to take into account when computing the signed distance function.")
+            ("gh", po::value<double>(&gaussianRadiusFactor)->default_value(0.2), "Blending Gaussian H factor (w.r.t. the Bonding Sphere Radius)")
+            ("clean", po::bool_switch(&doCleanResults), "If set, will try some cleaning steps on the output surface")
+            ("epsilon", po::value<double>(&epsilon)->default_value(0.001), "Difference tolerance when comparing values in the SDF." )
+        ;
+
+    // Read parameters from command line
+    po::variables_map vm;
+    po::store(po::parse_command_line(argc, argv, options), vm);
+    po::notify(vm);
+
+    if (vm.count("help") || argc == 1) {
+        std::cout << options << "\n";
+        return 1;
+    }
+
 	// Some input parameters check
+    if (outputFileName.empty() && outputFileDir.empty()) {
+        std::cout << "[ERROR] Please set either --outFile or --outDir parameters (or both)." << std::endl;
+        return -1;
+    }
 	if ( manifoldFlag < 0 || manifoldFlag > 2 ) {
 		cerr << "ManifoldnessFlag parameter must be 0, 1 or 2!" << endl ;
 		return -1 ;
@@ -94,7 +118,7 @@ int main ( int argc, char **argv) {
 	std::ostringstream orName ; // Debug only!
 	std::ostringstream osClean ;
 	std::ostringstream osClean2 ;
-	if ( outputFileName == (char*)0 ) {
+	if ( outputFileName.empty() ) {
 		// Get the input file name, to name the output one with the same name
 		string inputFilePathStr( inputSplatsFile ) ; 
 		size_t indexFileName = inputFilePathStr.find_last_of( "/\\" ) ;
@@ -110,39 +134,27 @@ int main ( int argc, char **argv) {
 									<< "_k" << k 
 									<< "_grf" << gaussianRadiusFactor ;
 									
-		if ( doOutputRedirection ) {
-			otxt << oss.str() << ".txt" ;
-		}
-
 		osClean << oss.str() << "_clean.off" ;
 		osClean2 << oss.str() << "_ch.off" ;
 
 		oss << ".off" ;
 	}
 	else {
-		oss << outputFileDir << "/" << outputFileName ;		
-		osClean << oss.str() << "_clean.off" ;
-		osClean2 << oss.str() << "_ch.off" ;
-		otxt << oss.str() << ".txt" ;
-
-		oss << ".off" ;
+        if ( outputFileDir.empty() ) {
+            oss << outputFileName ;
+        }
+        else {
+            oss << outputFileDir << "/" << outputFileName;
+            osClean << oss.str() << "_clean.off";
+            osClean2 << oss.str() << "_ch.off";
+            otxt << oss.str() << ".txt";
+        }
 	}
-	char* fullOutputFilePath ;
-	fullOutputFilePath = new char [ oss.str().size()+1 ] ;
-	strcpy ( fullOutputFilePath, oss.str().c_str() ) ;
+	std::string fullOutputFilePath =oss.str();
 	
-	// Redirect the output if needed
-	std::ofstream outTxt;
-	if ( doOutputRedirection ) {
-		cout << "Redirecting output to a txt file..." << endl ;
-		outTxt.open( otxt.str().c_str() ) ;
-		std::streambuf *coutbuf = std::cout.rdbuf() ; //save old buf
-		std::cout.rdbuf( outTxt.rdbuf() ) ;
-	}
-
 	// Print parameters on screen
 	cout << "Parameters:" << endl ;
-	cout << "  Input file: " << inputSplatsFile ;
+	cout << "  Input file: " << inputSplatsFile << endl ;
 	cout << "  Output file: " << fullOutputFilePath << endl ;
 	cout << "  Angular Bound = " << angularBound << endl ;
 	cout << "  Radius Bound = " << radiusBound << endl ;
@@ -283,11 +295,6 @@ int main ( int argc, char **argv) {
 		else {
 			std::cout << "- Resulting surface is manifold, no cleaning required." << std::endl ;
 		}
-	}
-
-
-	if ( doOutputRedirection ) {
-		outTxt.close() ;
 	}
 
 	return 0 ;

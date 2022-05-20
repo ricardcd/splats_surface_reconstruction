@@ -1,5 +1,5 @@
 if(NOT SPLATS_BUILD_TESTS)
-    set(SPLATS_BUILD_TESTS True)
+    set(SPLATS_BUILD_TESTS False)
 endif()
 
 if (SPLATS_BUILD_TESTS)

@@ -101,8 +101,8 @@ public :
 									const double &ransacT,
 									const double &intConsFact, 
 									const int &intConsNum,
-									const bool &debugOutput,
-									const bool &debugVisualize ) ;
+									const bool &debugOutput);
+//									const bool &debugVisualize ) ;
 	
 	// Sets the default parameters
 	void setDefaultParameters() ;
@@ -331,8 +331,8 @@ SegmentQueryIntersectionOracle<K>::SegmentQueryIntersectionOracle( const std::ve
 																   const double &ransacT,
 																   const double &intConsFact, 
 																   const int &intConsNum,
-																   const bool &debugOutput,
-																   const bool &debugVisualize ) :
+																   const bool &debugOutput) :
+																   //const bool &debugVisualize ) :
 m_pts( inputPoints ),
 m_degree( degree ),
 m_forceLBQOnSegment( forceLBQOnSegment ),

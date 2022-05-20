@@ -141,7 +141,7 @@ public:
 private: 
     Tree_shared_ptr													m_pTree ; // Pointer to the AABB tree
 	std::vector< Point_3 >											m_initialPoints ;	
-	double															m_distanceSigma  ;	
+	double															m_distanceSigma  ;
 	double															m_ransacDistThres ;
 	double															m_smallestRansacSegment ;	
 	Intersection													m_computedIntersection ; // Due to the requirement of knowing beforehand if there exist an intersection in Do_intersect_surface, 
@@ -169,7 +169,7 @@ public:
 	// Constructor with the AABB tree and the intersection type as parameter
 	AABB_Tree_Splat_3_Mesher_Oracle(	Tree *pTree, 									
 										std::vector< Point_3 > initialPoints,
-										double distanceSigma = 0.5, 
+										double distanceSigma = 0.5,
 										double ransacDistThres = 0.1,
 										double smallestRansacSegment = 0.0 ) { 
 		m_pTree = Tree_shared_ptr( pTree ) ;

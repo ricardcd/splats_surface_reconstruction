@@ -149,11 +149,11 @@ void ncut(	const Eigen::SparseMatrix<FT>& W,
 //		}
 
         // NEW CODE (following: https://eigen.tuxfamily.org/bz/show_bug.cgi?id=230)
-
         for(unsigned int i = 0; i < nbEigenValues; i++) {
             double* evp = solver.RawEigenvector(i);
-            for (unsigned int j = 0; j < numData; j++)
-                eigenVectors(j, i) = evp[j];
+            for (unsigned int j = 0; j < numData; j++) {
+                usEigenVectors(j, i) = evp[j];
+            }
         }
 	}
 
